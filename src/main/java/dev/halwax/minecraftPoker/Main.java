@@ -33,6 +33,7 @@ public class Main extends JavaPlugin {
 
     private void init(PluginManager pluginManager) {
         pluginManager.registerEvents(new PlayerConnectionListener(this), this);
+        Objects.requireNonNull(getCommand("join")).setExecutor(new dev.halwax.minecraftPoker.commands.JoinCommand(this));
     }
 
     public void onDisable() {
