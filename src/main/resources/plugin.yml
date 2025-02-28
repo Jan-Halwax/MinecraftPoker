@@ -8,3 +8,5 @@ website: https://halwax.dev/
 commands:
   join:
     description: Join the poker game
+  start:
+    description: Start the poker game
