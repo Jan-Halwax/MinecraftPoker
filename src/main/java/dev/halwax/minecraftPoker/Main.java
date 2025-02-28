@@ -31,6 +31,9 @@ public class Main extends JavaPlugin {
         init(Bukkit.getPluginManager());
     }
 
+    private void init(PluginManager pluginManager) {
+        pluginManager.registerEvents(new PlayerConnectionListener(this), this);
+    }
 
     public void onDisable() {
         System.out.println("[Poker] Plugin deaktiviert!");
