@@ -26,7 +26,7 @@ public class Main extends JavaPlugin {
         gameStateManager = new GameStateManager(this);
         players = new ArrayList<>();
 
-        gameStateManager.setGameState(GameState.LOBBY_STATE);
+        gameStateManager.setGameState(GameState.PRELOBBY_STATE);
 
         init(Bukkit.getPluginManager());
     }

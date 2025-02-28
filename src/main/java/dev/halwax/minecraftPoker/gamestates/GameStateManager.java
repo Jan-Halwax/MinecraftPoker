@@ -12,9 +12,9 @@ public class GameStateManager {
         this.plugin = plugin;
         gameStates = new GameState[3];
 
+        gameStates[GameState.PRELOBBY_STATE] = new PreLobbyState();
         gameStates[GameState.LOBBY_STATE] = new LobbyState();
         gameStates[GameState.INGAME_STATE] = new IngameState();
-        gameStates[GameState.ENDING_STATE] = new EndingState();
     }
 
     public void setGameState(int gameStateID) {

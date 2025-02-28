@@ -1,7 +1,9 @@
 package dev.halwax.minecraftPoker.listeners;
 
 import dev.halwax.minecraftPoker.Main;
+import dev.halwax.minecraftPoker.gamestates.IngameState;
 import dev.halwax.minecraftPoker.gamestates.LobbyState;
+import dev.halwax.minecraftPoker.gamestates.PreLobbyState;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -23,13 +25,15 @@ public class PlayerConnectionListener implements Listener {
     public void handlePlayerJoin(PlayerJoinEvent event) {
         Player player = event.getPlayer();
         event.setJoinMessage(Main.PREFIX + "§a" + player.getDisplayName() + " §7hat den Server betreten!");
-        player.sendMessage(Main.PREFIX + "§7Willkommen auf dem Server!");
-        if (!(plugin.getGameStateManager().getCurrentGameState() instanceof LobbyState)) {
-            player.sendMessage(Main.PREFIX + "§cDas Spiel hat bereits begonnen! Du kannst mit §a/spectate §c zuschauen!");
-            return;
-        }
-        player.sendMessage(Main.PREFIX + "§7Benutze §a/join §7um dem Spiel beizutreten!"
-                + " §7(" + plugin.getPlayers().size() + "/" + LobbyState.MAX_PLAYERS + ")");
+        Bukkit.getScheduler().runTaskLater(plugin, () -> {
+            player.sendMessage(Main.PREFIX + "§7Willkommen auf dem Server!");
+            switch (plugin.getGameStateManager().getCurrentGameState().getClass().getSimpleName()) {
+                case "PreLobbyState" -> player.sendMessage(Main.PREFIX + "§7Das Spiel hat noch nicht begonnen! Du kannst mit §a/create §7 ein Spiel erstellen!");
+                case "LobbyState" -> player.sendMessage(Main.PREFIX + "§7Das Spiel hat noch nicht begonnen! Du kannst mit §a/join §7 dem Spiel beitreten! "
+                                    + "§7(" + plugin.getPlayers().size() + "/" + LobbyState.MAX_PLAYERS + ")");
+                case "IngameState" -> player.sendMessage(Main.PREFIX + "§cDas Spiel hat bereits begonnen! Du kannst mit §a/spectate §c zuschauen!");
+            }
+        }, 1L);
     }
 
     @EventHandler
