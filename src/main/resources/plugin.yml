@@ -1,0 +1,7 @@
+name: MinecraftPoker
+version: 1.0
+main: dev.halwax.minecraftPoker.Main
+api-version: '1.20'
+authors: [ Jan Halwax ]
+description: Poker in Minecraft
+website: https://halwax.dev/

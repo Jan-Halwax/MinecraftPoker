@@ -17,13 +17,16 @@ public class Main extends JavaPlugin {
     public static final String PREFIX = "§7[§cPoker§7] §r",
                                NO_PERMISSION = PREFIX + "§cDazu hast du keine Berechtigung!";
 
+    private GameStateManager gameStateManager;
     private ArrayList<Player> players;
 
     public void onEnable() {
         System.out.println("[Poker] Plugin aktiviert!");
 
+        gameStateManager = new GameStateManager(this);
         players = new ArrayList<>();
 
+        gameStateManager.setGameState(GameState.LOBBY_STATE);
 
         init(Bukkit.getPluginManager());
     }
@@ -31,6 +34,10 @@ public class Main extends JavaPlugin {
 
     public void onDisable() {
         System.out.println("[Poker] Plugin deaktiviert!");
+    }
+
+    public GameStateManager getGameStateManager() {
+        return gameStateManager;
     }
 
     public ArrayList<Player> getPlayers() {
