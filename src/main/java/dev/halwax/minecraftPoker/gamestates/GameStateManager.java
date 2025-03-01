@@ -2,23 +2,32 @@ package dev.halwax.minecraftPoker.gamestates;
 
 import dev.halwax.minecraftPoker.Main;
 
+/**
+ * Verwaltet die verschiedenen GameStates des Spiels.
+ */
 public class GameStateManager {
 
-    private Main plugin;
-    private GameState[] gameStates;
+    private final Main plugin;
+    private final GameState[] gameStates;
     private GameState currentGameState;
 
     public GameStateManager(Main plugin) {
         this.plugin = plugin;
         gameStates = new GameState[3];
 
-        gameStates[GameState.PRELOBBY_STATE] = new PreLobbyState();
-        gameStates[GameState.LOBBY_STATE] = new LobbyState();
-        gameStates[GameState.INGAME_STATE] = new IngameState();
+        // GameStates mit Plugin-Referenz initialisieren
+        gameStates[GameState.PRELOBBY_STATE] = new PreLobbyState(plugin);
+        gameStates[GameState.LOBBY_STATE] = new LobbyState(plugin);
+        gameStates[GameState.INGAME_STATE] = new IngameState(plugin);
     }
 
+    /**
+     * Setzt den aktuellen GameState.
+     *
+     * @param gameStateID ID des GameStates
+     */
     public void setGameState(int gameStateID) {
-        if(currentGameState != null) {
+        if (currentGameState != null) {
             currentGameState.stop();
         }
 
@@ -26,14 +35,19 @@ public class GameStateManager {
         currentGameState.start();
     }
 
+    /**
+     * Stoppt den aktuellen GameState.
+     */
     public void stopCurrentGameState() {
-        if(currentGameState != null) {
+        if (currentGameState != null) {
             currentGameState.stop();
         }
         currentGameState = null;
     }
 
-
+    /**
+     * Gibt den aktuellen GameState zurück.
+     */
     public GameState getCurrentGameState() {
         return currentGameState;
     }

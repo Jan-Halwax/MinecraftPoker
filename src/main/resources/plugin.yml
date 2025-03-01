@@ -6,7 +6,23 @@ authors: [ Jan Halwax ]
 description: Poker in Minecraft
 website: https://halwax.dev/
 commands:
-  join:
-    description: Join the poker game
-  start:
-    description: Start the poker game
+  poker:
+    description: Hauptbefehl für alle Poker-Funktionen
+    usage: /poker <create|join|start|stop|help>
+    permission: poker.use
+permissions:
+  poker.use:
+    description: Erlaubt die Nutzung des /poker Befehls
+    default: true
+  poker.create:
+    description: Erlaubt das Erstellen eines Poker-Spiels
+    default: op
+  poker.join:
+    description: Erlaubt das Beitreten zu einem Poker-Spiel
+    default: true
+  poker.start:
+    description: Erlaubt das Starten eines Poker-Spiels
+    default: op
+  poker.stop:
+    description: Erlaubt das Stoppen eines Poker-Spiels
+    default: op
