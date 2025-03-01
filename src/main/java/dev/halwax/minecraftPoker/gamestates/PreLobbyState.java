@@ -21,9 +21,11 @@ public class PreLobbyState extends GameState {
         Bukkit.getLogger().info("PreLobbyState started!");
 
         // Nachricht an alle Online-Spieler
-        Bukkit.getOnlinePlayers().forEach(player ->
-                player.sendMessage(Main.PREFIX + ChatColor.AQUA + "Das Poker-Plugin wurde geladen. " +
-                        "Nutze /create, um ein neues Spiel zu erstellen!"));
+        Bukkit.getOnlinePlayers().stream()
+                .filter(player -> player.hasPermission("poker.create"))
+                .forEach(player ->
+                        player.sendMessage(Main.PREFIX + ChatColor.AQUA + "Das Poker-Plugin wurde geladen. " +
+                                "Nutze /poker create, um ein neues Spiel zu erstellen!"));
     }
 
     @Override

@@ -36,9 +36,12 @@ public class PlayerConnectionListener implements Listener {
             // Unterschiedliche Nachricht je nach aktuellem GameState
             String gameStateClassName = plugin.getGameStateManager().getCurrentGameState().getClass().getSimpleName();
             switch (gameStateClassName) {
-                case "PreLobbyState" ->
-                        player.sendMessage(Main.PREFIX + "§7Das Spiel hat noch nicht begonnen! " +
-                                "Du kannst mit §a/poker create §7 ein Spiel erstellen!");
+                case "PreLobbyState" -> {
+                                    if (player.hasPermission("poker.create")) {
+                                        player.sendMessage(Main.PREFIX + "§7Das Spiel hat noch nicht begonnen! " +
+                                                "Du kannst mit §a/poker create §7 ein Spiel erstellen!");
+                                    }
+                                }
                 case "LobbyState" ->
                         player.sendMessage(Main.PREFIX + "§7Das Spiel hat noch nicht begonnen! " +
                                 "Du kannst mit §a/poker join §7 dem Spiel beitreten! " +
