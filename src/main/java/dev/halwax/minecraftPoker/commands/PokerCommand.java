@@ -26,7 +26,7 @@ import java.util.stream.Collectors;
 public class PokerCommand implements CommandExecutor, TabCompleter {
 
     private final Main plugin;
-    private final List<String> subCommands = Arrays.asList("create", "join", "start", "stop", "help");
+    private final List<String> subCommands = Arrays.asList("create", "join", "start", "stop", "rejoin", "help");
 
     public PokerCommand(Main plugin) {
         this.plugin = plugin;
@@ -46,6 +46,7 @@ public class PokerCommand implements CommandExecutor, TabCompleter {
             case "join" -> handleJoinCommand(sender, args);
             case "start" -> handleStartCommand(sender, args);
             case "stop" -> handleStopCommand(sender, args);
+            case "rejoin" -> handleRejoinCommand(sender, args);
             case "help" -> sendHelpMessage(sender);
             default -> {
                 sender.sendMessage(Main.PREFIX + ChatColor.RED + "Unbekanntes Kommando. Verwende /poker help für Hilfe.");
@@ -204,6 +205,37 @@ public class PokerCommand implements CommandExecutor, TabCompleter {
     }
 
     /**
+     * Verarbeitet den Befehl zum erneuten Beitreten zum Spiel (bei unbeabsichtigtem Inventar-Schließen).
+     */
+    private void handleRejoinCommand(CommandSender sender, String[] args) {
+        if (!(sender instanceof Player player)) {
+            sender.sendMessage(Main.PREFIX + ChatColor.RED + "Dieser Befehl kann nur von einem Spieler ausgeführt werden!");
+            return;
+        }
+
+        if (!player.hasPermission("poker.rejoin")) {
+            player.sendMessage(Main.NO_PERMISSION);
+            return;
+        }
+
+        // Prüfen, ob das Spiel läuft
+        if (!plugin.getPokerGame().isGameStarted()) {
+            player.sendMessage(Main.PREFIX + ChatColor.RED + "Es läuft aktuell kein Poker-Spiel!");
+            return;
+        }
+
+        // Prüfen, ob der Spieler im Spiel ist
+        if (!plugin.getPlayers().contains(player)) {
+            player.sendMessage(Main.PREFIX + ChatColor.RED + "Du bist nicht im aktuellen Poker-Spiel!");
+            return;
+        }
+
+        // Inventar wieder öffnen
+        player.openInventory(plugin.getPokerGame().getGameInventory());
+        player.sendMessage(Main.PREFIX + ChatColor.GREEN + "Du hast dich wieder mit dem Poker-Spiel verbunden!");
+    }
+
+    /**
      * Sendet eine Hilfe-Nachricht mit allen verfügbaren Kommandos.
      */
     private void sendHelpMessage(CommandSender sender) {
@@ -212,6 +244,7 @@ public class PokerCommand implements CommandExecutor, TabCompleter {
         sender.sendMessage(Main.PREFIX + ChatColor.GOLD + "/poker join" + ChatColor.GRAY + " - Tritt dem aktuellen Poker-Spiel bei");
         sender.sendMessage(Main.PREFIX + ChatColor.GOLD + "/poker start" + ChatColor.GRAY + " - Startet das Poker-Spiel");
         sender.sendMessage(Main.PREFIX + ChatColor.GOLD + "/poker stop" + ChatColor.GRAY + " - Stoppt das laufende Poker-Spiel");
+        sender.sendMessage(Main.PREFIX + ChatColor.GOLD + "/poker rejoin" + ChatColor.GRAY + " - Verbindet dich wieder mit dem Poker-Spiel");
         sender.sendMessage(Main.PREFIX + ChatColor.GOLD + "/poker help" + ChatColor.GRAY + " - Zeigt diese Hilfe an");
     }
 

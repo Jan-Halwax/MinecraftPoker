@@ -33,6 +33,8 @@ public class PokerRoundManager {
     private int currentBet;
     private int currentPlayerIndex;
     private boolean bettingRoundActive;
+    private int bigBlindIndex;
+    private boolean bigBlindHasOption;
 
     public PokerRoundManager(List<PokerPlayer> players, List<Card> communityCards,
                              GameUIManager uiManager, GameMessageBroadcaster broadcaster) {
@@ -45,6 +47,8 @@ public class PokerRoundManager {
         this.currentBet = 0;
         this.currentPlayerIndex = 0;
         this.bettingRoundActive = false;
+        this.bigBlindIndex = 0;
+        this.bigBlindHasOption = false;
     }
 
     /**
@@ -56,10 +60,10 @@ public class PokerRoundManager {
         // Small Blind ist der Spieler nach dem Dealer
         int sbIndex = (dealerIndex + 1) % players.size();
         // Big Blind ist der Spieler nach dem Small Blind
-        int bbIndex = (sbIndex + 1) % players.size();
+        bigBlindIndex = (sbIndex + 1) % players.size();
 
         PokerPlayer sb = players.get(sbIndex);
-        PokerPlayer bb = players.get(bbIndex);
+        PokerPlayer bb = players.get(bigBlindIndex);
 
         int sbPaid = Math.min(sb.getChips(), SMALL_BLIND);
         int bbPaid = Math.min(bb.getChips(), BIG_BLIND);
@@ -129,7 +133,16 @@ public class PokerRoundManager {
     public void startBettingRound() {
         // Aktueller Bet bleibt bestehen (wurde in postBlinds auf BIG_BLIND gesetzt)
         bettingRoundActive = true;
-        currentPlayerIndex = (dealerIndex + 3) % players.size(); // Spieler nach dem Big Blind
+
+        // Spieler nach dem Big Blind beginnt (UTG - Under The Gun)
+        currentPlayerIndex = (bigBlindIndex + 1) % players.size();
+
+        // In der ersten Setzrunde (pre-flop) hat der Big Blind das Recht auf eine Option am Ende
+        if (isPreFlop()) {
+            bigBlindHasOption = true;
+        } else {
+            bigBlindHasOption = false;
+        }
 
         broadcaster.broadcastMessage(ChatColor.GOLD + "Die Setzrunde beginnt!");
         promptPlayerAction();
@@ -142,11 +155,78 @@ public class PokerRoundManager {
         PokerPlayer currentPlayer = players.get(currentPlayerIndex);
         Player player = Bukkit.getPlayer(currentPlayer.getUuid());
         if (player != null && player.isOnline()) {
-            // Nachricht senden
-            player.sendMessage(ChatColor.GOLD + "Du bist am Zug! FOLD, CALL oder RAISE?");
+            // Aktionsmöglichkeiten basierend auf Spielzustand bestimmen
+            String actionText;
 
-            // Sound abspielen (NOTE_PLING = hoher Glockenton)
-            player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_PLING, 1.0f, 1.0f);
+            if (currentBet == 0) {
+                // Wenn noch kein Einsatz in dieser Runde: Check oder Bet
+                actionText = ChatColor.GREEN + "CHECK" + ChatColor.GRAY + " | " +
+                        ChatColor.YELLOW + "BET" + ChatColor.GRAY + " | " +
+                        ChatColor.RED + "FOLD";
+            } else if (currentBet == currentPlayer.getCurrentBet()) {
+                // Wenn Spieler bereits den Höchsteinsatz hat: Check oder Raise
+                actionText = ChatColor.GREEN + "CHECK" + ChatColor.GRAY + " | " +
+                        ChatColor.YELLOW + "RAISE" + ChatColor.GRAY + " | " +
+                        ChatColor.RED + "FOLD";
+            } else {
+                // Wenn es einen Einsatz gibt, den der Spieler noch nicht getätigt hat: Call oder Raise
+                int toCall = currentBet - currentPlayer.getCurrentBet();
+                actionText = ChatColor.GREEN + "CALL (" + toCall + ")" + ChatColor.GRAY + " | " +
+                        ChatColor.YELLOW + "RAISE" + ChatColor.GRAY + " | " +
+                        ChatColor.RED + "FOLD";
+            }
+
+            // Besondere Anzeige für Big Blind Option
+            if (isPreFlop() && currentPlayerIndex == bigBlindIndex && bigBlindHasOption) {
+                actionText += ChatColor.GOLD + " - BIG BLIND OPTION";
+            }
+
+            // ActionBar-Nachricht (über der Hotbar, auch bei geöffnetem Inventar sichtbar)
+            player.spigot().sendMessage(
+                    net.md_5.bungee.api.ChatMessageType.ACTION_BAR,
+                    net.md_5.bungee.api.chat.TextComponent.fromLegacyText(
+                            ChatColor.GOLD + "DU BIST AM ZUG! " + actionText
+                    )
+            );
+
+            // Aktuellen Spieler im Inventar markieren
+            markCurrentPlayerInInventory(currentPlayer);
+
+            // Sound abspielen (lauter und wiederholend für bessere Wahrnehmung)
+            player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_PLING, 1.0f, 1.5f);
+            // Einen zweiten Sound nach einer kurzen Verzögerung abspielen
+            Bukkit.getScheduler().runTaskLater(
+                    Bukkit.getPluginManager().getPlugin("MinecraftPoker"),
+                    () -> player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_PLING, 1.0f, 1.8f),
+                    5L
+            );
+
+            // Auch im Chat informieren (als Backup)
+            player.sendMessage(ChatColor.GOLD + "▶ " + ChatColor.BOLD + "DU BIST AM ZUG! " + actionText);
+
+            // Zusätzliche Info: Aktuelle Einsätze und Pot anzeigen
+            StringBuilder betInfo = new StringBuilder(ChatColor.GRAY + "Pot: " + ChatColor.WHITE + pot + ChatColor.GRAY + " | Einsätze: ");
+
+            // Einsätze aller aktiven Spieler anzeigen
+            boolean firstPlayer = true;
+            for (PokerPlayer pp : players) {
+                if (pp.isFolded()) continue;
+
+                Player p = Bukkit.getPlayer(pp.getUuid());
+                if (p != null) {
+                    if (!firstPlayer) betInfo.append(", ");
+                    firstPlayer = false;
+
+                    // Aktuellen Spieler hervorheben
+                    if (pp.equals(currentPlayer)) {
+                        betInfo.append(ChatColor.YELLOW).append(p.getName()).append(": ").append(pp.getCurrentBet());
+                    } else {
+                        betInfo.append(ChatColor.WHITE).append(p.getName()).append(": ").append(pp.getCurrentBet());
+                    }
+                }
+            }
+
+            player.sendMessage(betInfo.toString());
 
             // Nachricht für andere Spieler
             for (PokerPlayer pp : players) {
@@ -161,9 +241,51 @@ public class PokerRoundManager {
     }
 
     /**
-     * Behandelt eine Spieleraktion (FOLD, CALL, RAISE).
+     * Markiert den aktuellen Spieler im Inventar durch Hervorhebung.
      */
-    public void handlePlayerAction(PokerPlayer player, String action, int raiseAmount) {
+    private void markCurrentPlayerInInventory(PokerPlayer currentPlayer) {
+        Inventory inv = uiManager.getGameInventory();
+        if (inv == null) return;
+
+        // Alle Hervorhebungen zurücksetzen
+        resetPlayerHighlights();
+
+        // Aktuelle Spielerchips durch glühendes Item hervorheben
+        int chipSlot = currentPlayer.getChipSlot();
+        ItemStack chipItem = inv.getItem(chipSlot);
+
+        if (chipItem != null) {
+            // Vorhandenes Item durch glühende Version ersetzen
+            ItemStack glowingChips = new ItemStack(Material.GOLD_BLOCK, 1);
+            ItemMeta meta = glowingChips.getItemMeta();
+            if (meta != null && chipItem.getItemMeta() != null) {
+                meta.setDisplayName(chipItem.getItemMeta().getDisplayName() + ChatColor.AQUA + " ⟸ AM ZUG!");
+                // Glowing-Effekt hinzufügen
+                meta.addEnchant(org.bukkit.enchantments.Enchantment.LUCK, 1, true);
+                meta.addItemFlags(org.bukkit.inventory.ItemFlag.HIDE_ENCHANTS);
+                glowingChips.setItemMeta(meta);
+            }
+            inv.setItem(chipSlot, glowingChips);
+        }
+    }
+
+    /**
+     * Setzt alle Spieler-Hervorhebungen im Inventar zurück.
+     */
+    private void resetPlayerHighlights() {
+        Inventory inv = uiManager.getGameInventory();
+        if (inv == null) return;
+
+        // Für jeden Spieler die Chips-Anzeige normal aktualisieren
+        for (PokerPlayer pp : players) {
+            uiManager.updateChipDisplay(pp, dealerIndex, players);
+        }
+    }
+
+    /**
+     * Behandelt eine Spieleraktion (FOLD, CHECK, CALL, BET, RAISE).
+     */
+    public void handlePlayerAction(PokerPlayer player, String action, int betAmount) {
         if (!bettingRoundActive || player.isFolded() || players.indexOf(player) != currentPlayerIndex) {
             return;
         }
@@ -173,13 +295,91 @@ public class PokerRoundManager {
                 foldPlayer(player);
                 break;
 
+            case "check":
+                // Check ist nur möglich, wenn kein Einsatz getätigt wurde oder Spieler bereits den höchsten Einsatz hat
+                if (currentBet == 0 || player.getCurrentBet() == currentBet) {
+                    checkAction(player);
+                } else {
+                    Player bukkitPlayer = Bukkit.getPlayer(player.getUuid());
+                    if (bukkitPlayer != null) {
+                        bukkitPlayer.sendMessage(ChatColor.RED + "Du kannst nicht checken, wenn es einen Einsatz gibt!");
+                    }
+                    return; // Keine Aktion ausgeführt, Spieler bleibt am Zug
+                }
+                break;
+
             case "call":
-                callAction(player);
+                // Call ist nur möglich, wenn es einen Einsatz gibt, den der Spieler noch nicht beglichen hat
+                if (currentBet > player.getCurrentBet()) {
+                    callAction(player);
+                } else {
+                    Player bukkitPlayer = Bukkit.getPlayer(player.getUuid());
+                    if (bukkitPlayer != null) {
+                        bukkitPlayer.sendMessage(ChatColor.RED + "Du kannst nicht callen, wenn es keinen Einsatz gibt oder du bereits den höchsten Einsatz hast!");
+                    }
+                    return; // Keine Aktion ausgeführt, Spieler bleibt am Zug
+                }
+                break;
+
+            case "bet":
+                // Bet ist nur möglich, wenn noch kein Einsatz in dieser Runde getätigt wurde
+                if (currentBet == 0) {
+                    // Mindestbetrag für Bet = Big Blind
+                    if (betAmount >= BIG_BLIND && player.getChips() >= betAmount) {
+                        betAction(player, betAmount);
+                    } else {
+                        Player bukkitPlayer = Bukkit.getPlayer(player.getUuid());
+                        if (bukkitPlayer != null) {
+                            bukkitPlayer.sendMessage(ChatColor.RED + "Bet muss mindestens " + BIG_BLIND +
+                                    " Chips betragen! Du hast " + player.getChips() + " Chips.");
+                        }
+                        return; // Keine Aktion ausgeführt, Spieler bleibt am Zug
+                    }
+                } else {
+                    Player bukkitPlayer = Bukkit.getPlayer(player.getUuid());
+                    if (bukkitPlayer != null) {
+                        bukkitPlayer.sendMessage(ChatColor.RED + "Du kannst nicht betten, wenn bereits ein Einsatz getätigt wurde! Verwende Raise.");
+                    }
+                    return; // Keine Aktion ausgeführt, Spieler bleibt am Zug
+                }
                 break;
 
             case "raise":
-                raiseAction(player, raiseAmount);
+                // Raise ist nur möglich, wenn bereits ein Einsatz getätigt wurde
+                if (currentBet > 0) {
+                    // Mindestbetrag für Raise = aktueller Einsatz + mindestens Big Blind
+                    int minRaise = currentBet + BIG_BLIND;
+                    int totalAmount = betAmount + (currentBet - player.getCurrentBet()); // Betrag zum Callen + Raise
+
+                    if (betAmount >= BIG_BLIND && player.getChips() >= totalAmount) {
+                        raiseAction(player, betAmount);
+
+                        // Wenn jemand erhöht, hat der Big Blind bereits seine Option gehabt
+                        bigBlindHasOption = false;
+                    } else {
+                        Player bukkitPlayer = Bukkit.getPlayer(player.getUuid());
+                        if (bukkitPlayer != null) {
+                            bukkitPlayer.sendMessage(ChatColor.RED + "Raise muss mindestens " + BIG_BLIND +
+                                    " Chips über dem aktuellen Einsatz sein! Du brauchst " +
+                                    totalAmount + " Chips total.");
+                        }
+                        return; // Keine Aktion ausgeführt, Spieler bleibt am Zug
+                    }
+                } else {
+                    Player bukkitPlayer = Bukkit.getPlayer(player.getUuid());
+                    if (bukkitPlayer != null) {
+                        bukkitPlayer.sendMessage(ChatColor.RED + "Du kannst nicht raisen, wenn noch kein Einsatz getätigt wurde! Verwende Bet.");
+                    }
+                    return; // Keine Aktion ausgeführt, Spieler bleibt am Zug
+                }
                 break;
+
+            default:
+                Player bukkitPlayer = Bukkit.getPlayer(player.getUuid());
+                if (bukkitPlayer != null) {
+                    bukkitPlayer.sendMessage(ChatColor.RED + "Ungültige Aktion! Erlaubte Aktionen: FOLD, CHECK, CALL, BET, RAISE");
+                }
+                return; // Keine Aktion ausgeführt, Spieler bleibt am Zug
         }
 
         // Bet-Slot mit aktuellen Einsatz des Spielers aktualisieren
@@ -190,6 +390,55 @@ public class PokerRoundManager {
 
         // Nächsten Spieler auffordern
         nextPlayer();
+    }
+
+    /**
+     * Führt einen Check aus (weitergeben ohne Einsatz).
+     */
+    private void checkAction(PokerPlayer player) {
+        Player bukkitPlayer = Bukkit.getPlayer(player.getUuid());
+        String playerName = (bukkitPlayer != null) ? bukkitPlayer.getName() : "Unbekannt";
+        broadcaster.broadcastMessage(ChatColor.YELLOW + playerName + " checkt.");
+
+        // Spieler kann checken ohne weitere Änderungen
+        if (bukkitPlayer != null) {
+            bukkitPlayer.playSound(bukkitPlayer.getLocation(), Sound.BLOCK_WOODEN_BUTTON_CLICK_OFF, 1.0f, 1.0f);
+        }
+    }
+
+    /**
+     * Führt einen Bet aus (erster Einsatz in der Runde).
+     */
+    private void betAction(PokerPlayer player, int betAmount) {
+        // Sicherstellen, dass der Spieler genug Chips hat
+        if (player.getChips() < betAmount) {
+            broadcaster.broadcastMessage(ChatColor.RED + "Nicht genug Chips für diesen Einsatz!");
+            return;
+        }
+
+        // Chips abziehen
+        player.setChips(player.getChips() - betAmount);
+
+        // Bet setzen
+        player.setCurrentBet(betAmount);
+
+        // Aktuellen Höchsteinsatz aktualisieren
+        currentBet = betAmount;
+
+        // Pot erhöhen
+        pot += betAmount;
+
+        Player bukkitPlayer = Bukkit.getPlayer(player.getUuid());
+        String playerName = (bukkitPlayer != null) ? bukkitPlayer.getName() : "Unbekannt";
+        broadcaster.broadcastMessage(ChatColor.YELLOW + playerName + " setzt " + betAmount + " Chips.");
+
+        // Chips-Anzeige aktualisieren
+        uiManager.updateChipDisplay(player, dealerIndex, players);
+
+        // Sound abspielen
+        if (bukkitPlayer != null) {
+            bukkitPlayer.playSound(bukkitPlayer.getLocation(), Sound.BLOCK_NOTE_BLOCK_PLING, 1.0f, 1.2f);
+        }
     }
 
     /**
@@ -218,7 +467,31 @@ public class PokerRoundManager {
      */
     private void callAction(PokerPlayer player) {
         int toCall = currentBet - player.getCurrentBet();
-        if (player.getChips() >= toCall && toCall > 0) {
+
+        // Prüfen ob der Spieler genug Chips hat
+        if (player.getChips() < toCall) {
+            // All-in Situation
+            int allInAmount = player.getChips();
+            player.setChips(0);
+            player.setCurrentBet(player.getCurrentBet() + allInAmount);
+            pot += allInAmount;
+
+            Player bukkitPlayer = Bukkit.getPlayer(player.getUuid());
+            String playerName = (bukkitPlayer != null) ? bukkitPlayer.getName() : "Unbekannt";
+            broadcaster.broadcastMessage(ChatColor.YELLOW + playerName + " geht ALL-IN mit " + allInAmount + " Chips!");
+
+            // Sound für All-In
+            if (bukkitPlayer != null) {
+                bukkitPlayer.playSound(bukkitPlayer.getLocation(), Sound.ENTITY_PLAYER_LEVELUP, 1.0f, 0.8f);
+                // Für alle anderen Spieler einen Alarm spielen
+                for (Player p : Bukkit.getOnlinePlayers()) {
+                    if (!p.equals(bukkitPlayer)) {
+                        p.playSound(p.getLocation(), Sound.BLOCK_BELL_USE, 0.8f, 1.0f);
+                    }
+                }
+            }
+        } else if (toCall > 0) {
+            // Normaler Call
             player.setChips(player.getChips() - toCall);
             player.setCurrentBet(currentBet);
             pot += toCall;
@@ -227,19 +500,18 @@ public class PokerRoundManager {
             String playerName = (bukkitPlayer != null) ? bukkitPlayer.getName() : "Unbekannt";
             broadcaster.broadcastMessage(ChatColor.YELLOW + playerName + " callt " + toCall + " Chips.");
 
-            // Chips-Anzeige aktualisieren
-            uiManager.updateChipDisplay(player, dealerIndex, players);
-
-            // Pot-Anzeige aktualisieren
-            uiManager.updatePotDisplay(pot);
-        } else if (toCall == 0) {
-            // Wenn nichts zu callen ist, dann ist es ein Check
-            Player bukkitPlayer = Bukkit.getPlayer(player.getUuid());
-            String playerName = (bukkitPlayer != null) ? bukkitPlayer.getName() : "Unbekannt";
-            broadcaster.broadcastMessage(ChatColor.YELLOW + playerName + " checkt.");
+            // Call-Sound
+            if (bukkitPlayer != null) {
+                bukkitPlayer.playSound(bukkitPlayer.getLocation(), Sound.BLOCK_NOTE_BLOCK_PLING, 1.0f, 1.0f);
+            }
         } else {
-            broadcaster.broadcastMessage(ChatColor.RED + "Nicht genug Chips zum Callen!");
+            // Wenn nichts zu callen ist, dann ist es ein Check
+            checkAction(player);
+            return;
         }
+
+        // Chips-Anzeige aktualisieren
+        uiManager.updateChipDisplay(player, dealerIndex, players);
     }
 
     /**
@@ -255,11 +527,39 @@ public class PokerRoundManager {
         // Neuer Gesamteinsatz des Spielers nach dem Raise
         int newTotalBet = player.getCurrentBet() + totalAmount;
 
-        if (raiseAmount >= BIG_BLIND && player.getChips() >= totalAmount) {
-            // Chips abziehen
-            player.setChips(player.getChips() - totalAmount);
+        // Prüfen, ob der Spieler genug Chips hat
+        if (player.getChips() < totalAmount) {
+            // All-in Situation
+            int allInAmount = player.getChips();
+            player.setChips(0);
 
-            // Aktuellen Einsatz des Spielers aktualisieren
+            int newBet = player.getCurrentBet() + allInAmount;
+            player.setCurrentBet(newBet);
+
+            // Aktuellen Höchsteinsatz anpassen, wenn der All-In höher ist
+            if (newBet > currentBet) {
+                currentBet = newBet;
+            }
+
+            pot += allInAmount;
+
+            Player bukkitPlayer = Bukkit.getPlayer(player.getUuid());
+            String playerName = (bukkitPlayer != null) ? bukkitPlayer.getName() : "Unbekannt";
+            broadcaster.broadcastMessage(ChatColor.YELLOW + playerName + " geht ALL-IN mit insgesamt " + newBet + " Chips!");
+
+            // Sound für All-In
+            if (bukkitPlayer != null) {
+                bukkitPlayer.playSound(bukkitPlayer.getLocation(), Sound.ENTITY_PLAYER_LEVELUP, 1.0f, 0.8f);
+                // Für alle anderen Spieler einen Alarm spielen
+                for (Player p : Bukkit.getOnlinePlayers()) {
+                    if (!p.equals(bukkitPlayer)) {
+                        p.playSound(p.getLocation(), Sound.BLOCK_BELL_USE, 0.8f, 1.0f);
+                    }
+                }
+            }
+        } else if (raiseAmount >= BIG_BLIND) {
+            // Normaler Raise
+            player.setChips(player.getChips() - totalAmount);
             player.setCurrentBet(newTotalBet);
 
             // Höchsteinsatz aktualisieren
@@ -270,22 +570,32 @@ public class PokerRoundManager {
 
             Player bukkitPlayer = Bukkit.getPlayer(player.getUuid());
             String playerName = (bukkitPlayer != null) ? bukkitPlayer.getName() : "Unbekannt";
-            broadcaster.broadcastMessage(ChatColor.YELLOW + playerName + " erhöht auf " + currentBet + " Chips total.");
+            broadcaster.broadcastMessage(ChatColor.YELLOW + playerName + " erhöht auf " + currentBet + " Chips total (+" + raiseAmount + ")");
 
-            // Chips-Anzeige aktualisieren
-            uiManager.updateChipDisplay(player, dealerIndex, players);
-
-            // Pot-Anzeige aktualisieren
-            uiManager.updatePotDisplay(pot);
+            // Raise-Sound - höherer Ton für Aufmerksamkeit
+            if (bukkitPlayer != null) {
+                bukkitPlayer.playSound(bukkitPlayer.getLocation(), Sound.BLOCK_NOTE_BLOCK_PLING, 1.0f, 1.4f);
+                // Zusätzlicher Sound für alle Spieler
+                for (Player p : Bukkit.getOnlinePlayers()) {
+                    p.playSound(p.getLocation(), Sound.BLOCK_NOTE_BLOCK_CHIME, 0.7f, 1.0f);
+                }
+            }
         } else {
-            broadcaster.broadcastMessage(ChatColor.RED + "Ungültiger Raise! (Min: " + BIG_BLIND + " Chips, verfügbar: " + player.getChips() + " Chips)");
+            broadcaster.broadcastMessage(ChatColor.RED + "Ungültiger Raise! (Min: " + BIG_BLIND + " Chips)");
+            return;
         }
+
+        // Chips-Anzeige aktualisieren
+        uiManager.updateChipDisplay(player, dealerIndex, players);
     }
 
     /**
      * Wechselt zum nächsten Spieler.
      */
     private void nextPlayer() {
+        // Speichern des vorherigen Spielerindex für Big Blind Option-Erkennung
+        int previousPlayerIndex = currentPlayerIndex;
+
         // Nächsten aktiven Spieler finden
         do {
             currentPlayerIndex = (currentPlayerIndex + 1) % players.size();
@@ -297,8 +607,23 @@ public class PokerRoundManager {
             }
         } while (players.get(currentPlayerIndex).isFolded());
 
-        // Prüfen, ob die Setzrunde beendet ist
-        if (isBettingRoundComplete()) {
+        // Setzrunde zu Ende?
+        boolean roundCompleted = false;
+
+        // Besondere Behandlung für Big Blind Option (nur in der Pre-Flop Phase)
+        if (isPreFlop() && bigBlindHasOption && currentPlayerIndex == bigBlindIndex) {
+            // Alle Spieler bis zum Big Blind durchgelaufen
+            // Der Big Blind bekommt seine Option, wenn niemand erhöht hat
+            broadcaster.broadcastMessage(ChatColor.YELLOW + "Big Blind hat eine Option (Check oder Raise)");
+            bigBlindHasOption = false;  // Option wird jetzt genutzt
+            promptPlayerAction();
+            return;
+        }
+
+        // Prüfen, ob wir wieder am Anfang der Runde sind (alle haben gehandelt)
+        roundCompleted = isFullRoundCompleted(previousPlayerIndex) && !bigBlindHasOption;
+
+        if (roundCompleted) {
             bettingRoundActive = false;
 
             // Alle Einsätze sammeln und zum Pot hinzufügen
@@ -322,6 +647,77 @@ public class PokerRoundManager {
         } else {
             promptPlayerAction();
         }
+    }
+
+    /**
+     * Prüft, ob eine vollständige Runde abgeschlossen ist.
+     * Eine Runde ist abgeschlossen, wenn entweder:
+     * 1. Alle aktiven Spieler den gleichen Einsatz haben oder all-in sind, oder
+     * 2. Nur noch ein Spieler aktiv ist.
+     */
+    private boolean isFullRoundCompleted(int previousPlayerIndex) {
+        // Wenn nur noch ein Spieler aktiv ist
+        if (getActivePlayerCount() <= 1) {
+            return true;
+        }
+
+        // Prüfen, ob alle aktiven Spieler den gleichen Einsatz getätigt haben oder all-in sind
+        boolean allPlayersBetEqual = true;
+
+        for (PokerPlayer pp : players) {
+            if (!pp.isFolded() && pp.getCurrentBet() != currentBet && pp.getChips() > 0) {
+                allPlayersBetEqual = false;
+                break;
+            }
+        }
+
+        // Haben wir eine komplette Runde gemacht? (wieder beim ersten Spieler angekommen)
+        // Im Pre-Flop ist der erste Spieler "UTG" (Under the Gun), nach dem Big Blind
+        // In den anderen Runden ist der erste Spieler der Small Blind (oder nächste aktive Spieler)
+        int firstPositionIndex;
+        if (isPreFlop()) {
+            firstPositionIndex = (bigBlindIndex + 1) % players.size();
+        } else {
+            firstPositionIndex = (dealerIndex + 1) % players.size();
+            // Überspringen von gefoldeten Spielern
+            while (players.get(firstPositionIndex).isFolded()) {
+                firstPositionIndex = (firstPositionIndex + 1) % players.size();
+            }
+        }
+
+        boolean fullCircle = (previousPlayerIndex == firstPositionIndex - 1) ||
+                (previousPlayerIndex == players.size() - 1 && firstPositionIndex == 0);
+
+        return allPlayersBetEqual && fullCircle;
+    }
+
+    /**
+     * Prüft, ob die aktuelle Setzrunde beendet ist.
+     * Diese Methode prüft nur, ob alle Spieler gleiche Einsätze haben oder all-in sind.
+     * Sie berücksichtigt nicht die Big Blind Option.
+     */
+    private boolean isBettingRoundComplete() {
+        // Zähle aktive Spieler
+        int activePlayers = getActivePlayerCount();
+
+        if (activePlayers <= 1) {
+            return true; // Nur noch ein Spieler übrig
+        }
+
+        // Für jeden aktiven Spieler prüfen, ob sein Einsatz dem aktuellen Höchsteinsatz entspricht
+        // oder ob er all-in ist (keine Chips mehr hat)
+        for (PokerPlayer pp : players) {
+            if (!pp.isFolded() && pp.getCurrentBet() != currentBet && pp.getChips() > 0) {
+                return false; // Mindestens ein aktiver Spieler muss noch handeln
+            }
+        }
+
+        // Wenn wir im Pre-Flop sind und der Big Blind noch seine Option hat
+        if (isPreFlop() && bigBlindHasOption) {
+            return false;
+        }
+
+        return true;
     }
 
     /**
@@ -507,27 +903,6 @@ public class PokerRoundManager {
     }
 
     /**
-     * Prüft, ob die aktuelle Setzrunde beendet ist.
-     */
-    private boolean isBettingRoundComplete() {
-        // Zähle aktive Spieler
-        int activePlayers = getActivePlayerCount();
-
-        if (activePlayers <= 1) {
-            return true; // Nur noch ein Spieler übrig
-        }
-
-        // Für jeden aktiven Spieler prüfen, ob sein Einsatz dem aktuellen Höchsteinsatz entspricht
-        // oder ob er all-in ist (keine Chips mehr hat)
-        for (PokerPlayer pp : players) {
-            if (!pp.isFolded() && pp.getCurrentBet() != currentBet && pp.getChips() > 0) {
-                return false; // Mindestens ein aktiver Spieler muss noch handeln
-            }
-        }
-        return true;
-    }
-
-    /**
      * Deckt den Flop auf (die ersten drei Community-Karten).
      */
     public void revealFlop() {
@@ -557,6 +932,9 @@ public class PokerRoundManager {
         Card card = communityCards.get(3);
         inv.setItem(slot, uiManager.createCardItem(card));
         broadcaster.broadcastMessage(ChatColor.GOLD + "Turn aufgedeckt!");
+
+        // Starte eine neue Setzrunde
+        startNewBettingRound();
     }
 
     /**
@@ -570,6 +948,9 @@ public class PokerRoundManager {
         Card card = communityCards.get(4);
         inv.setItem(slot, uiManager.createCardItem(card));
         broadcaster.broadcastMessage(ChatColor.GOLD + "River aufgedeckt!");
+
+        // Starte eine neue Setzrunde
+        startNewBettingRound();
     }
 
     /**
@@ -655,7 +1036,7 @@ public class PokerRoundManager {
         // Setzrunde aktivieren
         bettingRoundActive = true;
 
-        // Nächster Spieler nach dem Dealer beginnt (Small Blind Position)
+        // Nach dem Flop beginnt der nächste aktive Spieler nach dem Dealer (Small Blind Position)
         currentPlayerIndex = (dealerIndex + 1) % players.size();
 
         // Überspringen von gefoldeten Spielern

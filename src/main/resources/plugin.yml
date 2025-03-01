@@ -8,7 +8,7 @@ website: https://halwax.dev/
 commands:
   poker:
     description: Hauptbefehl für alle Poker-Funktionen
-    usage: /poker <create|join|start|stop|help>
+    usage: /poker <create|join|start|stop|rejoin|help>
     permission: poker.use
 permissions:
   poker.use:
@@ -26,3 +26,6 @@ permissions:
   poker.stop:
     description: Erlaubt das Stoppen eines Poker-Spiels
     default: op
+  poker.rejoin:
+    description: Erlaubt das erneute Verbinden mit einem laufenden Poker-Spiel
+    default: true
