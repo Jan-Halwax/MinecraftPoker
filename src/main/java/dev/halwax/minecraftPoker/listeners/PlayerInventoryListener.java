@@ -6,12 +6,15 @@ import org.bukkit.Material;
 import org.bukkit.Sound;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
+import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryCloseEvent;
+import org.bukkit.event.player.PlayerToggleSneakEvent;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
+import org.bukkit.scheduler.BukkitTask;
 
 import dev.halwax.minecraftPoker.Main;
 import dev.halwax.minecraftPoker.game.Game;
@@ -19,7 +22,15 @@ import dev.halwax.minecraftPoker.game.player.PokerPlayer;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+
+import net.md_5.bungee.api.chat.ClickEvent;
+import net.md_5.bungee.api.chat.ComponentBuilder;
+import net.md_5.bungee.api.chat.HoverEvent;
+import net.md_5.bungee.api.chat.TextComponent;
 
 /**
  * Reagiert auf Klicks in Inventaren, um Poker-Aktionen zu verarbeiten.
@@ -32,6 +43,13 @@ public class PlayerInventoryListener implements Listener {
     private PokerPlayer currentBettingPlayer;
     private String currentAction;
     private int lastRaiseAmount = BIG_BLIND; // Standard-Erhöhungsbetrag
+
+    // Map, um zu speichern, ob ein Spieler gerade das Poker-Inventar geschlossen hat
+    private final Map<UUID, BukkitTask> rejoinReminderTasks = new HashMap<>();
+
+    // Map zum Speichern, ob ein Spieler kürzlich das Inventar geschlossen hat (für Sneak-Rejoin)
+    private final Map<UUID, Long> recentInventoryClose = new HashMap<>();
+    private static final long SNEAK_REJOIN_TIMEOUT = 30000; // 30 Sekunden Zeitfenster für Sneak-Rejoin
 
     private static final int BIG_BLIND = 20;
     private static final int[] BET_OPTIONS = {BIG_BLIND, 2*BIG_BLIND, 3*BIG_BLIND, 5*BIG_BLIND, 10*BIG_BLIND};
@@ -121,6 +139,52 @@ public class PlayerInventoryListener implements Listener {
         if (event.getInventory().equals(game.getGameInventory())) {
             event.setCancelled(true);
         }
+    }
+
+    /**
+     * Erkennt Sneaking-Ereignisse für den Rejoin.
+     */
+    @EventHandler(priority = EventPriority.NORMAL)
+    public void onPlayerToggleSneak(PlayerToggleSneakEvent event) {
+        Player player = event.getPlayer();
+
+        // Nur reagieren, wenn der Spieler anfängt zu sneaken (nicht wenn er aufhört)
+        if (!event.isSneaking()) {
+            return;
+        }
+
+        // Prüfen, ob das Spiel läuft
+        if (!game.isGameStarted()) {
+            return;
+        }
+
+        // Prüfen, ob der Spieler im Spiel ist
+        if (!plugin.getPlayers().contains(player)) {
+            return;
+        }
+
+        // Prüfen, ob das Inventar bereits geöffnet ist
+        if (player.getOpenInventory().getTopInventory() == game.getGameInventory()) {
+            return;
+        }
+
+        // Prüfen, ob der Spieler kürzlich das Inventar geschlossen hat (innerhalb des Zeitfensters)
+        Long closeTime = recentInventoryClose.get(player.getUniqueId());
+        if (closeTime == null || System.currentTimeMillis() - closeTime > SNEAK_REJOIN_TIMEOUT) {
+            return;
+        }
+
+        // Inventar wieder öffnen
+        player.openInventory(game.getGameInventory());
+
+        // Bestätigungsnachricht senden
+        player.sendMessage(Main.PREFIX + ChatColor.GREEN + "Du bist durch Sneaken zum Poker-Spiel zurückgekehrt!");
+
+        // Sound abspielen
+        player.playSound(player.getLocation(), Sound.ENTITY_PLAYER_LEVELUP, 0.5f, 1.2f);
+
+        // Zeitstempel aus der Map entfernen
+        recentInventoryClose.remove(player.getUniqueId());
     }
 
     /**
@@ -380,7 +444,7 @@ public class PlayerInventoryListener implements Listener {
     }
 
     /**
-     * Behandelt das Schließen des Bet-Inventars.
+     * Behandelt das Schließen des Inventars.
      */
     @EventHandler
     public void onInventoryClose(InventoryCloseEvent event) {
@@ -388,10 +452,10 @@ public class PlayerInventoryListener implements Listener {
             return;
         }
 
+        // Wenn Bet-Menü geschlossen wird, öffne das Poker-Inventar wieder
         if (event.getInventory().equals(betInventory) && currentBettingPlayer != null &&
                 player.getUniqueId().equals(currentBettingPlayer.getUuid())) {
 
-            // Wenn das Bet-Menü geschlossen wird, öffne das Spiel-Inventar wieder
             Bukkit.getScheduler().runTaskLater(plugin, () -> {
                 if (game.isGameStarted() && plugin.getPlayers().contains(player)) {
                     player.openInventory(game.getGameInventory());
@@ -401,6 +465,70 @@ public class PlayerInventoryListener implements Listener {
                 currentBettingPlayer = null;
                 currentAction = null;
             }, 1L);
+
+            return;
         }
+
+        // Wenn Poker-Inventar geschlossen wird und der Spieler im Spiel ist
+        if (event.getInventory().equals(game.getGameInventory()) &&
+                plugin.getPlayers().contains(player) &&
+                game.isGameStarted()) {
+
+            // Zeitstempel für Sneak-Rejoin speichern
+            recentInventoryClose.put(player.getUniqueId(), System.currentTimeMillis());
+
+            // Bestehenden Task abbrechen, falls vorhanden
+            BukkitTask existingTask = rejoinReminderTasks.get(player.getUniqueId());
+            if (existingTask != null) {
+                existingTask.cancel();
+            }
+
+            // Nachricht mit Rejoin-Button anzeigen (nach kurzer Verzögerung)
+            BukkitTask task = Bukkit.getScheduler().runTaskLater(plugin, () -> {
+                // Nur die Nachricht anzeigen, wenn der Spieler immer noch im Spiel ist und das Inventar nicht schon wieder geöffnet hat
+                if (plugin.getPlayers().contains(player) && game.isGameStarted() && player.getOpenInventory().getTopInventory() != game.getGameInventory()) {
+                    sendRejoinMessage(player);
+                }
+
+                // Task aus der Map entfernen
+                rejoinReminderTasks.remove(player.getUniqueId());
+            }, 1L); // 1 Tick Verzögerung
+
+            // Task in der Map speichern
+            rejoinReminderTasks.put(player.getUniqueId(), task);
+        }
+    }
+
+    /**
+     * Sendet eine Chat-Nachricht mit einem klickbaren Rejoin-Button.
+     */
+    private void sendRejoinMessage(Player player) {
+        // Linie erstellen
+        TextComponent line = new TextComponent("\n" + ChatColor.DARK_GRAY + "---------------" +
+                ChatColor.GRAY + "[ " + ChatColor.GOLD + "Poker" + ChatColor.GRAY + " ]" +
+                ChatColor.DARK_GRAY + "---------------\n");
+
+        // Frage erstellen
+        TextComponent question = new TextComponent(ChatColor.YELLOW + "Möchtest du wieder zum Poker-Spiel zurückkehren?\n");
+
+        // Rejoin-Button erstellen
+        TextComponent rejoinButton = new TextComponent(ChatColor.GREEN + "[ Klicke hier zum Zurückkehren ]");
+        rejoinButton.setClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/poker rejoin"));
+        rejoinButton.setHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT,
+                new ComponentBuilder(ChatColor.GREEN + "Klicke, um zum Poker-Spiel zurückzukehren!").create()));
+
+        // Sneak-Info erstellen
+        TextComponent sneakInfo = new TextComponent("\n" + ChatColor.AQUA + "Tipp: " +
+                ChatColor.WHITE + "Du kannst auch SHIFT drücken (sneaken), um zurückzukehren!");
+
+        // Abschlusszeile erstellen
+        TextComponent closingLine = new TextComponent("\n" + ChatColor.DARK_GRAY +
+                "---------------------------------------------\n");
+
+        // Nachricht zusammenbauen und senden
+        player.spigot().sendMessage(line, question, rejoinButton, sneakInfo, closingLine);
+
+        // Sound abspielen, um auf die Nachricht aufmerksam zu machen
+        player.playSound(player.getLocation(), Sound.ENTITY_EXPERIENCE_ORB_PICKUP, 0.5f, 1.0f);
     }
 }

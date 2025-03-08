@@ -1,5 +1,6 @@
 package dev.halwax.minecraftPoker.game.ui;
 
+import java.util.ArrayList;
 import java.util.List;
 
 import org.bukkit.Bukkit;
@@ -11,6 +12,8 @@ import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 
 import dev.halwax.minecraftPoker.game.card.Card;
+import dev.halwax.minecraftPoker.game.card.Rank;
+import dev.halwax.minecraftPoker.game.card.Suit;
 import dev.halwax.minecraftPoker.game.player.PokerPlayer;
 
 /**
@@ -99,10 +102,81 @@ public class GameUIManager {
         ItemStack cardItem = new ItemStack(Material.PAPER, 1);
         ItemMeta meta = cardItem.getItemMeta();
         if (meta != null) {
+            // Den originalen Code als Namen beibehalten
             meta.setDisplayName(card.getCode());
+
+            // Ausführlichen Kartennamen und Farbinfo als Lore hinzufügen
+            List<String> lore = new ArrayList<>();
+
+            // Farbe der Karte bestimmen und im Lore anzeigen
+            ChatColor cardColor = getCardColor(card.suit());
+            String suitName = getSuitName(card.suit());
+            String rankName = getRankName(card.rank());
+
+            // Zuerst die Farbe, dann der Wert (z.B. "Herz Ass")
+            lore.add(cardColor + suitName + " " + rankName);
+
+            // Je nach Farbe und Wert der Karte zusätzliche Info anzeigen
+            if (card.rank() == Rank.ACE) {
+                lore.add(ChatColor.GRAY + "Kann als höchste oder niedrigste Karte gelten");
+            }
+
+            meta.setLore(lore);
             cardItem.setItemMeta(meta);
         }
         return cardItem;
+    }
+
+    /**
+     * Bestimmt die Chat-Farbe für eine Kartenfarbe.
+     *
+     * @param suit Die Kartenfarbe
+     * @return Die entsprechende Chat-Farbe
+     */
+    private ChatColor getCardColor(Suit suit) {
+        return switch (suit) {
+            case HEARTS, DIAMONDS -> ChatColor.RED;
+            case SPADES, CLUBS -> ChatColor.DARK_GRAY;
+        };
+    }
+
+    /**
+     * Gibt den Namen der Kartenfarbe auf Deutsch zurück.
+     *
+     * @param suit Die Kartenfarbe
+     * @return Der deutsche Name der Farbe
+     */
+    private String getSuitName(Suit suit) {
+        return switch (suit) {
+            case HEARTS -> "Herz";
+            case DIAMONDS -> "Karo";
+            case SPADES -> "Pik";
+            case CLUBS -> "Kreuz";
+        };
+    }
+
+    /**
+     * Gibt den Namen des Kartenwertes auf Deutsch zurück.
+     *
+     * @param rank Der Kartenwert
+     * @return Der deutsche Name des Wertes
+     */
+    private String getRankName(Rank rank) {
+        return switch (rank) {
+            case ACE -> "Ass";
+            case TWO -> "Zwei";
+            case THREE -> "Drei";
+            case FOUR -> "Vier";
+            case FIVE -> "Fünf";
+            case SIX -> "Sechs";
+            case SEVEN -> "Sieben";
+            case EIGHT -> "Acht";
+            case NINE -> "Neun";
+            case TEN -> "Zehn";
+            case JACK -> "Bube";
+            case QUEEN -> "Dame";
+            case KING -> "König";
+        };
     }
 
     /**
@@ -115,6 +189,12 @@ public class GameUIManager {
         ItemMeta meta = card.getItemMeta();
         if (meta != null) {
             meta.setDisplayName("???");
+
+            // Lore für verdeckte Karte
+            List<String> lore = new ArrayList<>();
+            lore.add(ChatColor.GRAY + "Diese Karte ist noch verdeckt");
+            meta.setLore(lore);
+
             card.setItemMeta(meta);
         }
         return card;
@@ -130,6 +210,12 @@ public class GameUIManager {
         ItemMeta fm = fold.getItemMeta();
         if (fm != null) {
             fm.setDisplayName(ChatColor.RED + "FOLD");
+
+            List<String> lore = new ArrayList<>();
+            lore.add(ChatColor.GRAY + "Klicke, um aus dieser Runde auszusteigen");
+            lore.add(ChatColor.GRAY + "Du verlierst alle bisher gesetzten Chips");
+            fm.setLore(lore);
+
             fold.setItemMeta(fm);
         }
 
@@ -137,6 +223,12 @@ public class GameUIManager {
         ItemMeta cm = checkCall.getItemMeta();
         if (cm != null) {
             cm.setDisplayName(ChatColor.YELLOW + "CHECK/CALL");
+
+            List<String> lore = new ArrayList<>();
+            lore.add(ChatColor.GRAY + "CHECK: Weiterreichen ohne Einsatz");
+            lore.add(ChatColor.GRAY + "CALL: Den aktuellen Einsatz mitgehen");
+            cm.setLore(lore);
+
             checkCall.setItemMeta(cm);
         }
 
@@ -144,6 +236,12 @@ public class GameUIManager {
         ItemMeta bm = betRaise.getItemMeta();
         if (bm != null) {
             bm.setDisplayName(ChatColor.GREEN + "BET/RAISE");
+
+            List<String> lore = new ArrayList<>();
+            lore.add(ChatColor.GRAY + "BET: Einen neuen Einsatz setzen");
+            lore.add(ChatColor.GRAY + "RAISE: Den aktuellen Einsatz erhöhen");
+            bm.setLore(lore);
+
             betRaise.setItemMeta(bm);
         }
 
@@ -164,6 +262,11 @@ public class GameUIManager {
         ItemMeta meta = foldedWool.getItemMeta();
         if (meta != null) {
             meta.setDisplayName(ChatColor.RED + "FOLDED");
+
+            List<String> lore = new ArrayList<>();
+            lore.add(ChatColor.GRAY + "Dieser Spieler ist aus der Runde ausgestiegen");
+            meta.setLore(lore);
+
             foldedWool.setItemMeta(meta);
         }
 
@@ -186,6 +289,15 @@ public class GameUIManager {
         ItemMeta meta = potItem.getItemMeta();
         if (meta != null) {
             meta.setDisplayName(ChatColor.GREEN + "Pot: " + potAmount + " Chips");
+
+            // Zusätzliche Informationen als Lore
+            if (potAmount > 0) {
+                List<String> lore = new ArrayList<>();
+                lore.add(ChatColor.GRAY + "Gesamtwert aller Einsätze in dieser Runde");
+                lore.add(ChatColor.GOLD + "Der Gewinner erhält " + potAmount + " Chips");
+                meta.setLore(lore);
+            }
+
             potItem.setItemMeta(meta);
         }
 
