@@ -1,0 +1,31 @@
+name: MinecraftPoker
+version: 1.0
+main: dev.halwax.minecraftPoker.Main
+api-version: '1.20'
+authors: [ Jan Halwax ]
+description: Poker in Minecraft
+website: https://halwax.dev/
+commands:
+  poker:
+    description: Hauptbefehl für alle Poker-Funktionen
+    usage: /poker <create|join|start|stop|rejoin|help>
+    permission: poker.use
+permissions:
+  poker.use:
+    description: Erlaubt die Nutzung des /poker Befehls
+    default: true
+  poker.create:
+    description: Erlaubt das Erstellen eines Poker-Spiels
+    default: op
+  poker.join:
+    description: Erlaubt das Beitreten zu einem Poker-Spiel
+    default: true
+  poker.start:
+    description: Erlaubt das Starten eines Poker-Spiels
+    default: op
+  poker.stop:
+    description: Erlaubt das Stoppen eines Poker-Spiels
+    default: op
+  poker.rejoin:
+    description: Erlaubt das erneute Verbinden mit einem laufenden Poker-Spiel
+    default: true
