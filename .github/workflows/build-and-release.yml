@@ -22,9 +22,9 @@ jobs:
     - name: Build with Maven
       run: mvn clean package
       
-    - name: Get version from pom.xml
+    - name: Get version from plugin.yml
       id: get_version
-      run: echo "VERSION=$(mvn help:evaluate -Dexpression=project.version -q -DforceStdout)" >> $GITHUB_OUTPUT
+      run: echo "VERSION=$(grep -oP '^version: \K.*' src/main/resources/plugin.yml)" >> $GITHUB_OUTPUT
       
     - name: Create Release
       id: create_release
