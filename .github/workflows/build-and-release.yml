@@ -24,7 +24,9 @@ jobs:
       
     - name: Get version from plugin.yml
       id: get_version
-      run: echo "VERSION=$(grep -oP '^version: \K.*' src/main/resources/plugin.yml)" >> $GITHUB_OUTPUT
+      run: |
+        VERSION=$(grep "version:" src/main/resources/plugin.yml | cut -d' ' -f2)
+        echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
       
     - name: Create Git Tag
       run: |
