@@ -18,6 +18,8 @@ import dev.halwax.minecraftPoker.game.player.PokerPlayer;
 
 /**
  * Verwaltet die UI-Elemente des Poker-Spiels.
+ * Diese Klasse ist verantwortlich für alle visuellen Aspekte des Spiels im Minecraft-Inventar,
+ * was dem Single Responsibility Principle entspricht.
  */
 public class GameUIManager {
 
@@ -303,6 +305,54 @@ public class GameUIManager {
 
         // Pot in Slot 31 anzeigen (Mitte des Inventars)
         gameInventory.setItem(31, potItem);
+    }
+
+    /**
+     * Aktualisiert die Anzeige des aktuellen Einsatzes im Bet-Slot.
+     *
+     * @param player Der Spieler, dessen Einsatz angezeigt werden soll
+     * @param smallBlindAmount Betrag des Small Blinds
+     * @param bigBlindAmount Betrag des Big Blinds
+     */
+    public void updateBetDisplay(PokerPlayer player, int smallBlindAmount, int bigBlindAmount) {
+        if (gameInventory == null) return;
+
+        int betSlot = player.getBetSlot();
+        int currentBet = player.getCurrentBet();
+
+        // Wenn Spieler bereits gefoldet hat, nichts tun
+        if (player.isFolded()) {
+            return;
+        }
+
+        if (currentBet == 0) {
+            // Wenn kein Einsatz, leeren Slot zeigen
+            gameInventory.setItem(betSlot, null);
+            return;
+        }
+
+        // Bestimme Material basierend auf der Höhe des Einsatzes
+        Material material;
+        if (currentBet <= smallBlindAmount) {
+            material = Material.IRON_NUGGET;  // Small Blind
+        } else if (currentBet <= bigBlindAmount) {
+            material = Material.GOLD_NUGGET;  // Big Blind
+        } else {
+            material = Material.GOLD_INGOT;   // Höhere Einsätze
+        }
+
+        // Anzahl der angezeigten Items (1-64), skaliert mit dem Einsatz
+        int amount = Math.min(64, Math.max(1, currentBet / 10));
+
+        // Bet-Anzeige aktualisieren
+        ItemStack betItem = new ItemStack(material, amount);
+        ItemMeta meta = betItem.getItemMeta();
+        if (meta != null) {
+            meta.setDisplayName(ChatColor.GOLD + "Einsatz: " + currentBet + " Chips");
+            betItem.setItemMeta(meta);
+        }
+
+        gameInventory.setItem(betSlot, betItem);
     }
 
     /**

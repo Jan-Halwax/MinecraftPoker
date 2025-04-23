@@ -1,13 +1,7 @@
 package dev.halwax.minecraftPoker.game.card;
 
-/**
- * Repräsentiert eine einzelne Spielkarte im Poker-Spiel.
- */
 public record Card(Suit suit, Rank rank) {
 
-    /**
-     * Gibt den String-Code der Karte zurück (z.B. "H7" für Herz 7).
-     */
     public String getCode() {
         return suit.getSymbol() + rank.getSymbol();
     }

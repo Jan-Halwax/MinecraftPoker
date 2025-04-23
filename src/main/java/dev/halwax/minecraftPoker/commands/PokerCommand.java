@@ -49,7 +49,7 @@ public class PokerCommand implements CommandExecutor, TabCompleter {
             case "rejoin" -> handleRejoinCommand(sender, args);
             case "help" -> sendHelpMessage(sender);
             default -> {
-                sender.sendMessage(Main.PREFIX + ChatColor.RED + "Unbekanntes Kommando. Verwende /poker help für Hilfe.");
+                sendHelpMessage(sender);
                 return false;
             }
         }
